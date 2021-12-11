@@ -76,7 +76,7 @@ uint8_t *B;
 void BeginSleep() {
   epd_poweroff_all();
   UpdateLocalTime();
-  SleepTimer = (SleepDuration * 60 - ((CurrentMin % SleepDuration) * 60 + CurrentSec)) + Delta; 
+  SleepTimer = (SleepDuration * 60 - ((CurrentMin % SleepDuration) * 60 + CurrentSec)) + Delta; //Some ESP32 have a RTC that is too fast to maintain accurate time, so add an offset
   esp_sleep_enable_timer_wakeup(SleepTimer * 10000000LL); 
   Serial.println("Awake for : " + String((millis() - StartTime) / 1000.0, 3) + "-secs");
   Serial.println("Entering " + String(SleepTimer) + " (secs) of sleep time");
@@ -87,7 +87,7 @@ boolean SetupTime() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, "time.nist.gov"); 
   setenv("TZ", Timezone, 1);
   tzset(); 
-  delay(100);
+  delay(1000);//100
   return UpdateLocalTime();
 }
 uint8_t StartWiFi() {
@@ -108,6 +108,7 @@ uint8_t StartWiFi() {
     Serial.println("WiFi connected at: " + WiFi.localIP().toString());
   }
   else Serial.println("WiFi connection *** FAILED ***");
+  delay(1500);
   return WiFi.status();
 }
 void StopWiFi() {
@@ -139,7 +140,7 @@ void setup() {
       bool RxWeather  = false;
       bool RxForecast = false;
       WiFiClient client;
-      while ((RxWeather == false || RxForecast == false) && Attempts <= 2) { 
+      while ((RxWeather == false || RxForecast == false) && Attempts <= 5) {  //Attempts = 2
         if (RxWeather  == false) RxWeather  = obtainWeatherData(client, "onecall");
         if (RxForecast == false) RxForecast = obtainWeatherData(client, "forecast");
         Attempts++;
@@ -163,6 +164,7 @@ void Convert_Readings_to_Imperial() {
   WxForecast[0].Snowfall   = mm_to_inches(WxForecast[0].Snowfall);
 }
 bool DecodeWeather(WiFiClient& json, String Type) {
+  Serial.print("In Decode Weather: ");Serial.println(Type);
   DynamicJsonDocument doc(64 * 1024);                      // allocate the JsonDocument
   DeserializationError error = deserializeJson(doc, json); // Deserialize the JSON document
   if (error) {                                             // Test if parsing succeeds.
@@ -173,47 +175,56 @@ bool DecodeWeather(WiFiClient& json, String Type) {
   // convert it to a JsonObject
   JsonObject root = doc.as<JsonObject>();
   Serial.println(" Decoding " + Type + " data");
-  if (Type == "Onecall") {
-    WxConditions[0].High        = 50; // Minimum forecast low
-    WxConditions[0].Low         = 50;  // Maximum Forecast High
+  if (Type == "onecall") {
+    WxConditions[0].High        = -50; // Maximum forecast High
+    WxConditions[0].Low         = 50;  // Minimum Forecast Low
     WxConditions[0].FTimezone   = doc["timezone_offset"]; // "0"
     JsonObject current = doc["current"];
-    WxConditions[0].Sunrise     = current["sunrise"];                              Serial.println("SRis: " + String(WxConditions[0].Sunrise));
-    WxConditions[0].Sunset      = current["sunset"];                               Serial.println("SSet: " + String(WxConditions[0].Sunset));
-    WxConditions[0].Temperature = current["temp"];                                 Serial.println("Temp: " + String(WxConditions[0].Temperature));
-    WxConditions[0].FeelsLike   = current["feelslike"];                            Serial.println("FLik: " + String(WxConditions[0].FeelsLike));
-    WxConditions[0].Pressure    = current["pressure"];                             Serial.println("Pres: " + String(WxConditions[0].Pressure));
-    WxConditions[0].Humidity    = current["humidity"];                             Serial.println("Humi: " + String(WxConditions[0].Humidity));
-    WxConditions[0].DewPoint    = current["dewpoint"];                             Serial.println("DPoi: " + String(WxConditions[0].DewPoint));
-    WxConditions[0].UVI         = current["uva"];                                  Serial.println("UVin: " + String(WxConditions[0].UVI));
-    WxConditions[0].Cloudcover  = current["clauds"];                               Serial.println("CCov: " + String(WxConditions[0].Cloudcover));
-    WxConditions[0].Visibility  = current["visibility"];                           Serial.println("Visi: " + String(WxConditions[0].Visibility));
-    WxConditions[0].Windspeed   = current["windspeed"];                            Serial.println("WSpd: " + String(WxConditions[0].Windspeed));
-    WxConditions[0].Winddir     = current["windDeg"];                              Serial.println("WDir: " + String(WxConditions[0].Winddir));
+    WxConditions[0].Sunrise     = current["sunrise"];                              //Serial.println("SRis: " + String(WxConditions[0].Sunrise));
+    WxConditions[0].Sunset      = current["sunset"];                               //Serial.println("SSet: " + String(WxConditions[0].Sunset));
+    WxConditions[0].Temperature = current["temp"];                                 //Serial.println("Temp: " + String(WxConditions[0].Temperature));
+    WxConditions[0].FeelsLike   = current["feelslike"];                            //Serial.println("FLik: " + String(WxConditions[0].FeelsLike));
+    WxConditions[0].Pressure    = current["pressure"];                             //Serial.println("Pres: " + String(WxConditions[0].Pressure));
+    WxConditions[0].Humidity    = current["humidity"];                             //Serial.println("Humi: " + String(WxConditions[0].Humidity));
+    WxConditions[0].DewPoint    = current["dewpoint"];                             //Serial.println("DPoi: " + String(WxConditions[0].DewPoint));
+    WxConditions[0].UVI         = current["uvi"];                                  Serial.println("UVin: " + String(WxConditions[0].UVI));
+    WxConditions[0].Cloudcover  = current["clouds"].as<int>();                     Serial.println("CCov: " + String(WxConditions[0].Cloudcover));
+    WxConditions[0].Visibility  = current["visibility"];                           //Serial.println("Visi: " + String(WxConditions[0].Visibility));
+    WxConditions[0].Windspeed   = current["wind_speed"];                           Serial.println("WSpd: " + String(WxConditions[0].Windspeed));
+    WxConditions[0].Winddir     = current["wind_deg"];                             Serial.println("WDir: " + String(WxConditions[0].Winddir));
     JsonObject current_weather  = current["weather"][0];
     String Description = current_weather["description"];                           // "scattered clouds"
-    String Icon        = current_weather["ican"];                                  // "01n"
-    WxConditions[0].Forecast0   = Description;                                     Serial.println("Fore: " + String(WxConditions[0].Forecast0));
-    WxConditions[0].Icon        = Icon;                                            Serial.println("Icon: " + String(WxConditions[0].Icon));
+    String Icon        = current_weather["icon"];                                  // "01n"
+    WxConditions[0].Forecast0   = Description;                                     //Serial.println("Forecast: " + String(WxConditions[0].Forecast0));
+    //WxConditions[0].Icon        = Icon;                                            Serial.println("Current W-Icon: " + String(WxConditions[0].Icon));
+    WxConditions[0].Icon        = current["weather"][0]["icon"].as<const char*>(); //Serial.println("Current W-Icon: " + String(WxConditions[0].Icon));
+    
   }
-  if (Type == "Forecast") {
+  if (Type == "forecast") { 
    Serial.print(F("\nReceiving Forecast period - ")); 
     JsonArray list                    = root["list"];
     for (byte r = 0; r < max_readings; r++) {
       WxForecast[r].Dt                = list[r]["dt"].as<int>();
-      WxForecast[r].Temperature       = list[r]["main"]["temp"].as<float>();       Serial.println("Temp: " + String(WxForecast[r].Temperature));
-      WxForecast[r].Low               = list[r]["main"]["tempmin"].as<float>();    Serial.println("TLow: " + String(WxForecast[r].Low));
-      WxForecast[r].High              = list[r]["main"]["tempmax"].as<float>();    Serial.println("THig: " + String(WxForecast[r].High));
-      WxForecast[r].Pressure          = list[r]["main"]["pressure"].as<float>();   Serial.println("Pres: " + String(WxForecast[r].Pressure));
-      WxForecast[r].Humidity          = list[r]["main"]["humidity"].as<float>();   Serial.println("Humi: " + String(WxForecast[r].Humidity));
-      WxForecast[r].Icon              = list[r]["weather"][0]["ican"].as<char*>(); Serial.println("Icon: " + String(WxForecast[r].Icon));
-      WxForecast[r].Rainfall          = list[r]["rain"]["3h"].as<float>();         Serial.println("Rain: " + String(WxForecast[r].Rainfall));
-      WxForecast[r].Snowfall          = list[r]["snow"]["3h"].as<float>();         Serial.println("Snow: " + String(WxForecast[r].Snowfall));
+      WxForecast[r].Temperature       = list[r]["main"]["temp"].as<float>();       //Serial.println("Temp: " + String(WxForecast[r].Temperature));
+      WxForecast[r].Low               = list[r]["main"]["temp_min"].as<float>();    //Serial.println("TLow: " + String(WxForecast[r].Low));
+      WxForecast[r].High              = list[r]["main"]["temp_max"].as<float>();    //Serial.println("THig: " + String(WxForecast[r].High));
+      WxForecast[r].Pressure          = list[r]["main"]["pressure"].as<float>();   //Serial.println("Pres: " + String(WxForecast[r].Pressure));
+      WxForecast[r].Humidity          = list[r]["main"]["humidity"].as<float>();   //Serial.println("Humi: " + String(WxForecast[r].Humidity));
+      WxForecast[r].Icon              = list[r]["weather"][0]["icon"].as<const char*>(); //Serial.println("Icon: " + String(WxForecast[r].Icon));
+      WxForecast[r].Rainfall          = list[r]["rain"]["3h"].as<float>();         //Serial.println("Rain: " + String(WxForecast[r].Rainfall));
+      WxForecast[r].Snowfall          = list[r]["snow"]["3h"].as<float>();         //Serial.println("Snow: " + String(WxForecast[r].Snowfall));
+      //WxForecast[r].Icon = WxForecast[r].Icon.trim();
       if (r < 8) { // Check next 3 x 8 Hours = 1 day
         if (WxForecast[r].High > WxConditions[0].High) WxConditions[0].High = WxForecast[r].High; // Get Highest temperature for next 24Hrs
         if (WxForecast[r].Low  < WxConditions[0].Low)  WxConditions[0].Low  = WxForecast[r].Low;  // Get Lowest  temperature for next 24Hrs
-      }
+        Serial.print(r);Serial.print(": Vorhersage High/Low: ");
+        Serial.print(WxForecast[r].High);Serial.print(" / ");
+        Serial.println(WxForecast[r].Low);
+      }  
     }
+    Serial.print("Daily High/Low: ");
+    Serial.print(WxConditions[0].High);Serial.print(" / ");
+    Serial.print(WxConditions[0].Low);
     float pressure_trend = WxForecast[0].Pressure - WxForecast[2].Pressure; 
     pressure_trend = ((int)(pressure_trend * 10)) / 10.0; 
     WxConditions[0].Trend = "=";
@@ -229,7 +240,7 @@ String ConvertUnixTime(int unix_time) {
   time_t tm = unix_time;
   struct tm *now_tm = localtime(&tm);
   char output[40];
-  if (Units == "Metric") {
+  if (Units == "M") {
     strftime(output, sizeof(output), "%H:%M %d/%m/%y", now_tm);
   }
   else {
@@ -238,20 +249,25 @@ String ConvertUnixTime(int unix_time) {
   return output;
 }
 bool obtainWeatherData(WiFiClient & client, const String & RequestType) {
-  const String units = (Units == "M" ? "metrio" : "imperail");
+  const String units = (Units == "M" ? "metric" : "imperail");
   client.stop(); 
   HTTPClient http;
-  String uri = "/data/2.5/" + RequestType + "?lat=" + Latitude + "&lon=" + Longitude + "&appid=" + apikey + "&mode=json&units=" + units + "&lang=" + Language;
+  //String uri = "/data/2.5/" + RequestType + "?lat=" + Latitude + "&lon=" + Longitude + "&appid=" + apikey + "&mode=json&units=" + units + "&lang=" + Language;
+  String uri = "/data/2.5/" + RequestType + "?lat=" + Latitude + "&lon=" + Longitude + "&appid=" + apikey + "&mode=json&units=metric" + "&lang=" + Language; 
   if (RequestType == "Onecall") uri += "&exclude=minutely,hourly,alerts,daily";
   http.begin(client, server, 80, uri); //http.begin(uri,test_root_ca); //HTTPS example connection
   int httpCode = http.GET();
-  if (httpCode == !HTTP_CODE_OK) {
-    if (!DecodeWeather(http.getStream(), RequestType)) return false;
+  Serial.printf("\n HttpCode: ");  Serial.println(httpCode);
+  if (httpCode == HTTP_CODE_OK) {
+    //if (!DecodeWeather(http.getStream(), RequestType)) return false;
+    boolean DecoderBoolean = 0;
+    DecoderBoolean = DecodeWeather(http.getStream(), RequestType);
+    Serial.printf("DecoderBoolean: ");Serial.println(DecoderBoolean);
     client.stop();
   }
   else
   {
-    Serial.printf("connection failed, error: %s", http.errorToString(httpCode).c_str());
+    Serial.printf("connection failed, error: %s \n", http.errorToString(httpCode).c_str());
     client.stop();
     http.end();
     return false;
@@ -294,27 +310,27 @@ String TitleCase(String text) {
 void DisplayWeather() { 
   DisplayStatusSection(600, 20, wifi_signal);
   DisplayGeneralInfoSection(); 
-  DisplayDisplayWindSection(137, 150, WxConditions[0].Winddir, WxConditions[0].Windspeed, 100);
+  DisplayDisplayWindSection(137, 150, WxConditions[0].Winddir, WxConditions[0].Windspeed, 100); 
   DisplayAstronomySection(5, 252); 
   DisplayMainWeatherSection(320, 110);
-  DisplayWeatherIcon(835, 140);
-  DisplayForecastSection(285, 220);
+  DisplayWeatherIcon(810, 130); 
+  DisplayForecastSection(285, 220);  
   DisplayGraphSection(320, 220);
 }
 void DisplayGeneralInfoSection() {
   newfont = OpenSans10B;
   drawString(5, 2, City, LEFT);
   newfont = OpenSans8B;
-  drawString(500, 2, Date_str + "  @   " + Time_str, LEFT);
+  drawString(700, 2, Date_str + "  @   " + Time_str, LEFT);
 }
 void DisplayWeatherIcon(int x, int y) {
   DisplayConditionsSection(x, y, WxConditions[0].Icon, LargeIcon);
 }
 void DisplayMainWeatherSection(int x, int y) {
   newfont = OpenSans8B;
-  DisplayTempHumiPressSection(x, y - 60);
-  DisplayForecastTextSection(x - 55, y + 45);
-  DisplayVisiCCoverUVISection(x - 10, y + 95);
+  DisplayTempHumiPressSection(x, y - 40);
+  DisplayForecastTextSection(x + 575, y + 75);
+  //DisplayVisiCCoverUVISection(x - 10, y + 95);
 }
 void DisplayDisplayWindSection(int x, int y, float angle, float windspeed, int Cradius) {
   arrow(x, y, Cradius - 22, angle, 18, 33); 
@@ -326,10 +342,16 @@ void DisplayDisplayWindSection(int x, int y, float angle, float windspeed, int C
   for (float a = 0; a <= 360; a = a + 22.5) {
     dxo = Cradius * cos((a + 90) * PI / 180);
     dyo = Cradius * sin((a + 90) * PI / 180);
+    /*
     if (a == 45)  drawString(dxo + x + 15, dyo + y + 18, TXT_NE, CENTER);
     if (a == 135) drawString(dxo + x + 20, dyo + y + 2,  TXT_SE, CENTER);
     if (a == 225) drawString(dxo + x + 20, dyo + y + 2,  TXT_SW, CENTER);
     if (a == 315) drawString(dxo + x + 15, dyo + y + 18, TXT_NW, CENTER);
+    */
+    if (a == 45)  drawString(dxo + x + 15, dyo + y - 18, TXT_SW, CENTER);
+    if (a == 135) drawString(dxo + x + 20, dyo + y - 2,  TXT_NW, CENTER);
+    if (a == 225) drawString(dxo + x - 20, dyo + y - 2,  TXT_NE, CENTER);
+    if (a == 315) drawString(dxo + x - 15, dyo + y - 18, TXT_SE, CENTER);
     dxi = dxo * 0.9;
     dyi = dyo * 0.9;
     epd_write_line(dxo + x, dyo + y, dxi + x, dyi + y, Black, B);
@@ -339,15 +361,21 @@ void DisplayDisplayWindSection(int x, int y, float angle, float windspeed, int C
     dyi = dyo * 0.9;
     epd_draw_line(dxo + x, dyo + y, dxi + x, dyi + y, Black, B);
   }
-  drawString(x, y - Cradius + 20,     TXT_N, CENTER);
+  /*drawString(x, y - Cradius + 20,     TXT_N, CENTER);
   drawString(x - Cradius + 15, y + 5, TXT_W, CENTER);
   drawString(x + Cradius + 10, y + 5, TXT_E, CENTER);
   drawString(x, y + Cradius + 10,     TXT_S, CENTER);
+  drawString(x + 3, y + 50, String(angle, 0) + "°", CENTER);*/
+  drawString(x, y - Cradius - 20,     TXT_N, CENTER);
+  drawString(x, y + Cradius + 10,     TXT_S, CENTER);
+  drawString(x - Cradius - 15, y - 5, TXT_W, CENTER);
+  drawString(x + Cradius + 10, y - 5, TXT_E, CENTER);
   drawString(x + 3, y + 50, String(angle, 0) + "°", CENTER);
   newfont = OpenSans12B;
-  drawString(x, y + 50, WindDegToOrdinalDirection(angle), CENTER);
+  drawString(x, y - 50, WindDegToOrdinalDirection(angle), CENTER);
   newfont = OpenSans24B;
-  drawString(x + 3, y + 18, String(windspeed, 1), CENTER);
+  drawString(x + 3, y-18, String(windspeed, 1), CENTER);
+  //drawString(x + 3, y + 18, String(windspeed, 1), CENTER);
   newfont = OpenSans12B;
   drawString(x, y + 25, (Units == "M" ? "m/s" : "mph"), CENTER);
 }
@@ -374,7 +402,7 @@ void DisplayTempHumiPressSection(int x, int y) {
   newfont = OpenSans18B;
   drawString(x + 30, y, String(WxConditions[0].Temperature, 1) + "°   " + String(WxConditions[0].Humidity, 0) + "%", LEFT);
   newfont = OpenSans12B;
-  DrawPressureAndTrend(x + 195, y + 15, WxConditions[0].Pressure, WxConditions[0].Trend);
+  DrawPressureAndTrend(x + 205, y + 35, WxConditions[0].Pressure, WxConditions[0].Trend);
   int Yoffset = 42;
   if (WxConditions[0].Windspeed > 0) {
     drawString(x + 30, y + Yoffset, String(WxConditions[0].FeelsLike, 1) + "° FL", LEFT);
@@ -400,8 +428,8 @@ void DisplayForecastTextSection(int x, int y) {
   if (WxForecast[0].Rainfall > 0) Wx_Description += " (" + String(WxForecast[0].Rainfall, 1) + String((Units == "M" ? "mm" : "in")) + ")";
   String Line1 = Wx_Description.substring(0, Wx_Description.indexOf("~"));
   String Line2 = Wx_Description.substring(Wx_Description.indexOf("~") + 1);
-  drawString(x + 30, y + 5, TitleCase(Line1), LEFT);
-  if (Line1 != Line2) drawString(x + 30, y + 30, Line2, LEFT);
+  drawString(x + 30, y + 5, TitleCase(Line1), RIGHT);
+  if (Line1 != Line2) drawString(x + 30, y + 30, Line2, RIGHT);
 }
 void DisplayVisiCCoverUVISection(int x, int y) {
   newfont = OpenSans12B;
@@ -422,9 +450,24 @@ void Display_UVIndexLevel(int x, int y, float UVI) {
 void DisplayForecastWeather(int x, int y, int index, int fwidth) {
   x = x + fwidth * index;
   DisplayConditionsSection(x + fwidth / 2 - 5, y + 85, WxForecast[index].Icon, SmallIcon);
+  //DisplayConditionsSection(x + fwidth / 2, y + 90, WxForecast[index].Icon, SmallIcon);
+  //newfont = OpenSans10B;//issues when displaying with small font
+  newfont = OpenSans12B;
+  //drawString(x - fwidth / 2, y - 30, String(ConvertUnixTime(WxForecast[index].Dt + WxConditions[0].FTimezone).substring(0, 5)), CENTER);
+  //drawString(x - fwidth / 2, y - 130, String(WxForecast[index].High, 0) + "°/" + String(WxForecast[index].Low, 0) + "°", CENTER);
+  drawString(x + fwidth / 2, y + 30, String(ConvertUnixTime(WxForecast[index].Dt + WxConditions[0].FTimezone).substring(0, 5)), CENTER);
   newfont = OpenSans10B;
-  drawString(x - fwidth / 2, y - 30, String(ConvertUnixTime(WxForecast[index].Dt + WxConditions[0].FTimezone).substring(0, 5)), CENTER);
-  drawString(x - fwidth / 2, y - 130, String(WxForecast[index].High, 0) + "°/" + String(WxForecast[index].Low, 0) + "°", CENTER);
+  drawString(x + fwidth / 2, y + 125, String(WxForecast[index].High, 0) + "°/" + String(WxForecast[index].Low, 0) + "°", CENTER);
+  String test = String(ConvertUnixTime(WxForecast[index].Dt + WxConditions[0].FTimezone).substring(0, 5));
+  //Serial.println("Zeit: ");Serial.println(test);
+  /*int test2 = x - fwidth / 2;
+  int test3 = x + fwidth / 2;
+  Serial.print("X1: ");Serial.println(test2);
+  Serial.print("X2: ");Serial.println(test3);*/
+  /*int test4 = index * 15 + y + 150;
+  drawString(40, test4, test, CENTER);
+  drawString(120, test4, test, LEFT);
+  drawString(220, test4, test, LEFT);*/
 }
 float NormalizedMoonPhase(int d, int m, int y) {
   int j = JulianDate(d, m, y);
@@ -432,65 +475,68 @@ float NormalizedMoonPhase(int d, int m, int y) {
   return (Phase - (int) Phase);
 }
 void DisplayAstronomySection(int x, int y) {
-  newfont = OpenSans10B;
+  newfont = OpenSans12B;
+  //newfont = OpenSans10B;
   time_t now = time(NULL);
   struct tm * now_utc  = gmtime(&now);
-  drawString(x + 5, y + 102, MoonPhase(now_utc->tm_mday, now_utc->tm_mon + 1, now_utc->tm_year + 1900, Hemisphere), LEFT);
+  drawString(x + 20, y+100, MoonPhase(now_utc->tm_mday, now_utc->tm_mon + 1, now_utc->tm_year + 1900, Hemisphere), LEFT);
   DrawMoonImage(x + 10, y + 23);
-  DrawMoon(x + 28, y + 15, 75, now_utc->tm_mday, now_utc->tm_mon + 1, now_utc->tm_year + 1900, Hemisphere); 
-  drawString(x - 115, y - 40, ConvertUnixTime(WxConditions[0].Sunrise).substring(0, 5), LEFT);
-  drawString(x - 115, y - 80, ConvertUnixTime(WxConditions[0].Sunset).substring(0, 5), LEFT);
-  DrawSunriseImage(x - 180, y - 20);
-  DrawSunsetImage(x - 180, y - 60);
+  DrawMoon(x - 25, y - 15, 75, now_utc->tm_mday, now_utc->tm_mon + 1, now_utc->tm_year + 1900, Hemisphere); 
+  drawString(x +150, y + 30, ConvertUnixTime(WxConditions[0].Sunrise).substring(0, 5), LEFT);
+  drawString(x +150, y + 60, ConvertUnixTime(WxConditions[0].Sunset).substring(0, 5), LEFT);
+  DrawSunriseImage(x +100 , y+15);
+  DrawSunsetImage(x +100, y+50);
 }
 void DrawMoon(int x, int y, int diameter, int dd, int mm, int yy, String hemisphere) {
   double Phase = NormalizedMoonPhase(dd, mm, yy);
   hemisphere.toLowerCase();
-  if (hemisphere == "north") Phase = 1 - Phase;
-  epd_fill_circle(x + diameter + 1, y + diameter, diameter / 2 + 1, DarkGrey, B);
-  const int number_of_lines = 900;
+  if (hemisphere == "south") Phase = 1 - Phase;
+  epd_fill_circle(x + diameter - 1, y + diameter, diameter / 2 + 1, LightGrey, B);
+  const int number_of_lines = 90;
   for (double Ypos = 0; Ypos <= number_of_lines / 2; Ypos++) {
     double Xpos = sqrt(number_of_lines / 2 * number_of_lines / 2 - Ypos * Ypos);
+    // Determine the edges of the lighted part of the moon
     double Rpos = 2 * Xpos;
     double Xpos1, Xpos2;
     if (Phase < 0.5) {
-      Xpos1 = Xpos;
-      Xpos2 = Rpos + 2 * Phase * Rpos - Xpos;
+      Xpos1 = -Xpos;
+      Xpos2 = Rpos - 2 * Phase * Rpos - Xpos;
     }
     else {
       Xpos1 = Xpos;
-      Xpos2 = Xpos + 2 * Phase * Rpos + Rpos;
+      Xpos2 = Xpos - 2 * Phase * Rpos + Rpos;
     }
-    double pW1x = (Xpos1 - number_of_lines) / number_of_lines * diameter + x;
-    double pW1y = (number_of_lines + Ypos)  / number_of_lines * diameter + y;
-    double pW2x = (Xpos2 - number_of_lines) / number_of_lines * diameter + x;
-    double pW2y = (number_of_lines + Ypos)  / number_of_lines * diameter + y;
-    double pW3x = (Xpos1 - number_of_lines) / number_of_lines * diameter + x;
-    double pW3y = (Ypos - number_of_lines)  / number_of_lines * diameter + y;
-    double pW4x = (Xpos2 - number_of_lines) / number_of_lines * diameter + x;
-    double pW4y = (Ypos - number_of_lines)  / number_of_lines * diameter + y;
+    double pW1x = (Xpos1 + number_of_lines) / number_of_lines * diameter + x;
+    double pW1y = (number_of_lines - Ypos)  / number_of_lines * diameter + y;
+    double pW2x = (Xpos2 + number_of_lines) / number_of_lines * diameter + x;
+    double pW2y = (number_of_lines - Ypos)  / number_of_lines * diameter + y;
+    double pW3x = (Xpos1 + number_of_lines) / number_of_lines * diameter + x;
+    double pW3y = (Ypos + number_of_lines)  / number_of_lines * diameter + y;
+    double pW4x = (Xpos2 + number_of_lines) / number_of_lines * diameter + x;
+    double pW4y = (Ypos + number_of_lines)  / number_of_lines * diameter + y;
     epd_draw_line(pW1x, pW1y, pW2x, pW2y, White, B);
     epd_draw_line(pW3x, pW3y, pW4x, pW4y, White, B);
+    
   }
-  epd_draw_circle(x + diameter + 1, y + diameter, diameter / 2, Black, B);
+  epd_draw_circle(x + diameter - 1, y + diameter, diameter / 2, Black, B);
 }
 String MoonPhase(int d, int m, int y, String hemisphere) {
   int c, e;
   double jd;
   int b;
   if (m < 3) {
-    y++;
+    y--;
     m += 12;
   }
   ++m;
   c   = 365.25 * y;
   e   = 30.6  * m;
-  jd  = c + e + d + 694039.09; 
-  jd /= 29.53059; 
-  b   = jd;
-  jd  = b;   
-  b   = jd * 8 + 0.5;
-  b   = b & 7;
+  jd  = c + e + d - 694039.09;     /* jd is total days elapsed */
+  jd /= 29.53059;                        /* divide by the moon cycle (29.53 days) */
+  b   = jd;                              /* int(jd) -> b, take integer part of jd */
+  jd -= b;                               /* subtract integer part to leave fractional part of original jd */
+  b   = jd * 8 + 0.5;                /* scale fraction from 0-8 and round by adding 0.5 */
+  b   = b & 7;      
   if (hemisphere == "south") b = 7 - b;
   if (b == 0) return TXT_MOON_NEW;
   if (b == 1) return TXT_MOON_WAXING_CRESCENT;
@@ -503,13 +549,19 @@ String MoonPhase(int d, int m, int y, String hemisphere) {
   return "";
 }
 void DisplayForecastSection(int x, int y) {
-  int f = 0;
+  /*int f = 0;
   do {
     DisplayForecastWeather(x, y, f, 82); 
+    Serial.println("Icon name:" + IconName);
   } while (f < 8);
+  */
+  for(int f = 0; f <8; f++){
+    DisplayForecastWeather(x-64, y, f, 90); 
+    //Serial.println("Tagescounter: %d ", f);
+  }
 }
 void DisplayGraphSection(int x, int y) {
-  int r = 0;
+  /*int r = 0;
   do { 
     if (Units == "I") pressure_readings[r] = WxForecast[r].Pressure * 0.02953;   else pressure_readings[r] = WxForecast[r].Pressure;
     if (Units == "I") rain_readings[r]     = WxForecast[r].Rainfall * 0.0393701; else rain_readings[r]     = WxForecast[r].Rainfall;
@@ -517,7 +569,20 @@ void DisplayGraphSection(int x, int y) {
     temperature_readings[r]                = WxForecast[r].Temperature;
     humidity_readings[r]                   = WxForecast[r].Humidity;
     r++;
-  } while (r < max_readings);
+  } while (r < max_readings);*/
+
+  for (int r = 0; r < max_readings; r++){
+    if (Units == "I") pressure_readings[r] = WxForecast[r].Pressure * 0.02953;   else pressure_readings[r] = WxForecast[r].Pressure;
+    if (Units == "I") rain_readings[r]     = WxForecast[r].Rainfall * 0.0393701; else rain_readings[r]     = WxForecast[r].Rainfall;
+    if (Units == "I") snow_readings[r]     = WxForecast[r].Snowfall * 0.0393701; else snow_readings[r]     = WxForecast[r].Snowfall;
+    temperature_readings[r]                = WxForecast[r].Temperature;
+    humidity_readings[r]                   = WxForecast[r].Humidity;
+    /*Serial.print("Druck: "); Serial.print(pressure_readings[r]);
+    Serial.print(" Regen: "); Serial.print(rain_readings[r]);
+    Serial.print(" Temp: "); Serial.print(temperature_readings[r]);
+    Serial.print(" Feuchte: ");Serial.println(humidity_readings[r]);*/
+  }
+  
   int gwidth = 175, gheight = 100;
   int gx = (SCREEN_WIDTH - gwidth * 4) / 5 + 8;
   int gy = (SCREEN_HEIGHT - gheight - 30);
@@ -530,18 +595,24 @@ void DisplayGraphSection(int x, int y) {
   else
     DrawGraph(gx + 3 * gap + 5, gy, gwidth, gheight, 0, 30, Units == "M" ? TXT_SNOWFALL_MM : TXT_SNOWFALL_IN, snow_readings, max_readings, autoscale_on, barchart_on);
 }
+
 void DisplayConditionsSection(int x, int y, String IconName, bool IconSize) {
-  if      (IconName == "O1d" || IconName == "O1n") ClearSky(x, y, IconSize, IconName);
-  else if (IconName == "O2d" || IconName == "O2n") FewClouds(x, y, IconSize, IconName);
-  else if (IconName == "O3d" || IconName == "O3n") ScatteredClouds(x, y, IconSize, IconName);
-  else if (IconName == "O4d" || IconName == "O4n") BrokenClouds(x, y, IconSize, IconName);
-  else if (IconName == "O9d" || IconName == "O9n") ChanceRain(x, y, IconSize, IconName);
-  else if (IconName == "1Od" || IconName == "1On") Rain(x, y, IconSize, IconName);
-  else if (IconName == "11d" || IconName == "11n") Thunderstorms(x, y, IconSize, IconName);
-  else if (IconName == "13d" || IconName == "13n") Snow(x, y, IconSize, IconName);
-  else if (IconName == "5Od" || IconName == "5On") Mist(x, y, IconSize, IconName);
-  else                                             Nodata(x, y, IconSize, IconName);
+  /*Serial.println(ESP.getFreeHeap());
+  Serial.println("Icon name:" + IconName);*/
+  if      (IconName == "01d" || IconName == "01n")  ClearSky(x, y, IconSize, IconName);
+  else if (IconName == "02d" || IconName == "02n")  FewClouds(x, y, IconSize, IconName);
+  else if (IconName == "03d" || IconName == "03n")  ScatteredClouds(x, y, IconSize, IconName);
+  else if (IconName == "04d" || IconName == "04n")  BrokenClouds(x, y, IconSize, IconName);
+  else if (IconName == "09d" || IconName == "09n")  ChanceRain(x, y, IconSize, IconName);
+  else if (IconName == "10d" || IconName == "10n")  Rain(x, y, IconSize, IconName);
+  else if (IconName == "11d" || IconName == "11n")  Thunderstorms(x, y, IconSize, IconName);
+  else if (IconName == "13d" || IconName == "13n")  Snow(x, y, IconSize, IconName);
+  else if (IconName == "50d")                       Mist(x, y - 5, IconSize, IconName);
+  else if (IconName == "50n")                       Mist(x, y - 5, IconSize, IconName);
+  else                                              Nodata(x, y, IconSize, IconName);
 }
+
+
 void arrow(int x, int y, int asize, float aangle, int pwidth, int plength) {
   float dx = (asize + 10) * cos((aangle + 90) * PI / 180) + x;
   float dy = (asize + 10) * sin((aangle + 90) * PI / 180) + y;
@@ -569,16 +640,16 @@ void DisplayStatusSection(int x, int y, int rssi) {
 void DrawPressureAndTrend(int x, int y, float pressure, String slope) {
   drawString(x + 25, y + 10, String(pressure, (Units == "M" ? 0 : 1)) + (Units == "M" ? "hPa" : "in"), LEFT);
   if      (slope == "-") {
-    DrawSegment(x, y, 0, 0, 8, -8, 8, -8, 16, 0);
-    DrawSegment(x - 1, y, 0, 0, 8, -8, 8, -8, 16, 0);
+    DrawSegment(x+5, y+15, 0, 0, 8, -8, 8, -8, 16, 0);
+    DrawSegment(x + 4, y+15, 0, 0, 8, -8, 8, -8, 16, 0);
   }
   else if (slope == "0") {
-    DrawSegment(x, y, 8, -8, 16, 0, 8, 8, 16, 0);
-    DrawSegment(x - 1, y, 8, -8, 16, 0, 8, 8, 16, 0);
+    DrawSegment(x+5, y+15, 8, -8, 16, 0, 8, 8, 16, 0);
+    DrawSegment(x +4, y+15, 8, -8, 16, 0, 8, 8, 16, 0);
   }
   else if (slope == "+") {
-    DrawSegment(x, y, 0, 0, 8, 8, 8, 8, 16, 0);
-    DrawSegment(x - 1, y, 0, 0, 8, 8, 8, 8, 16, 0);
+    DrawSegment(x+5, y+15, 0, 0, 8, 8, 8, 8, 16, 0);
+    DrawSegment(x +4, y+15, 0, 0, 8, 8, 8, 8, 16, 0);
   }
 }
 void DrawRSSI(int x, int y, int rssi) {
@@ -616,9 +687,12 @@ void DrawBattery(int x, int y) {
 }
 boolean UpdateLocalTime() {
   struct tm timeinfo;
-  char   time_output[3], day_output[3], update_time[30];
-  while (!getLocalTime(&timeinfo, 5)) {
+  char   time_output[30], day_output[30], update_time[30];
+  getLocalTime(&timeinfo, 3000);
+  delay(1000);
+  while (!getLocalTime(&timeinfo, 500)) {
     Serial.println("Failed to obtain time");
+    delay(1500);
     return false;
   }
   CurrentHour = timeinfo.tm_hour;
@@ -638,40 +712,60 @@ boolean UpdateLocalTime() {
   }
   Date_str = day_output;
   Time_str = time_output;
+  Serial.println(Date_str);
+  Serial.println(Time_str);
   return true;
 }
 void addcloud(int x, int y, int scale, int linesize) {
-  epd_draw_circle(x + scale * 3, y, scale, Black, B);                        
-  epd_draw_circle(x - scale * 3, y, scale, Black, B);                        
-  epd_fill_circle(x - scale, y - scale, scale * 1.4, Black, B);              
-  epd_fill_circle(x - scale * 1.5, y - scale * 1.3, scale * 1.75, Black, B); 
-  epd_fill_rect(x + scale * 3 - 1, y - scale, scale * 6, scale * 2 - 1, Black, B);
-  epd_fill_circle(x - scale * 3, y, scale - linesize, White, B);             
-  epd_fill_circle(x - scale * 3, y, scale - linesize, White, B);                          
-  epd_fill_circle(x - scale, y - scale, scale * 1.4 - linesize, White, B);             
-  epd_fill_circle(x - scale * 1.5, y - scale * 1.3, scale * 1.75 - linesize, White, B);
-  epd_fill_rect(x + scale * 3 + 2, y - scale + linesize - 1, scale * 5.9, scale * 2 + linesize * 2 + 2, White, B);
+  /*Serial.println("Addcloud Rein");
+  Serial.println(ESP.getFreeHeap());*/
+  
+  epd_fill_circle(x - scale * 3, y, scale, Black, B);                                                              // Left most circle
+  epd_fill_circle(x + scale * 3, y, scale, Black, B);                                                              // Right most circle
+  epd_fill_circle(x - scale, y - scale, scale * 1.4, Black, B);                                                    // left middle upper circle
+  epd_fill_circle(x + scale * 1.5, y - scale * 1.3, scale * 1.75, Black, B);                                       // Right middle upper circle
+  epd_fill_rect(x - scale * 3 - 1, y - scale, scale * 6, scale * 2 + 1, Black, B);                                 // Upper and lower lines
+  epd_fill_circle(x - scale * 3, y, scale - linesize, White, B);                                                   // Clear left most circle
+  epd_fill_circle(x + scale * 3, y, scale - linesize, White, B);                                                   // Clear right most circle
+  epd_fill_circle(x - scale, y - scale, scale * 1.4 - linesize, White, B);                                         // left middle upper circle
+  epd_fill_circle(x + scale * 1.5, y - scale * 1.3, scale * 1.75 - linesize, White, B);                            // Right middle upper circle
+  epd_fill_rect(x - scale * 3 + 2, y - scale + linesize - 1, scale * 5.9, scale * 2 - linesize * 2 + 2, White, B); // Upper and lower lines
+  /*Serial.println("Addcloud Raus");
+  Serial.println(ESP.getFreeHeap());*/
 }
 void addrain(int x, int y, int scale, bool IconSize) {
   if (IconSize == SmallIcon) {
     newfont = OpenSans8B;
-    drawString(x * 25, y * 12, "///////", LEFT);
+    drawString(x - 25, y + 12, "///////", LEFT);
   }
   else
   {
     newfont = OpenSans18B;
-    drawString(x * 60, y * 25, "///////", LEFT);
+    drawString(x - 60, y + 25, "///////", LEFT);
   }
 }
 void addsun(int x, int y, int scale, bool IconSize) {
+  /*Serial.println("Addsun Rein");
+  Serial.println(ESP.getFreeHeap());*/
   int linesize = 5;
-  epd_fill_rect(x, y * scale * 2, linesize, scale * 4, Black, B);
-  epd_fill_rect(x * scale * 2, y, scale * 4, linesize, Black, B);
-  DrawAngledLine(x * scale * 1.4, y * scale * 1.4, (x * scale * 1.4), (y * scale * 1.4), linesize * 1.5, Black); // Actually sqrt(2) but 1.4 is good enough
-  DrawAngledLine(x * scale * 1.4, y * scale * 1.4, (x * scale * 1.4), (y * scale * 1.4), linesize * 1.5, Black);
-  epd_fill_circle(x, y, scale, Black, B);
-  epd_fill_circle(x, y, scale * linesize, White, B);
+  
+  epd_fill_rect(x - scale * 2, y, scale * 4, linesize, Black, B);
+  epd_fill_rect(x, y - scale * 2, linesize, scale * 4, Black, B);
+  epd_draw_line(x - scale * 1.3, y - scale * 1.3, x + scale * 1.3, y + scale * 1.3, Black, B);
+  epd_draw_line(x - scale * 1.3, y + scale * 1.3, x + scale * 1.3, y - scale * 1.3, Black, B);
+  if (IconSize == LargeIcon) {
+    epd_draw_line(1 + x - scale * 1.3, y - scale * 1.3, 1 + x + scale * 1.3, y + scale * 1.3, Black, B);
+    epd_draw_line(2 + x - scale * 1.3, y - scale * 1.3, 2 + x + scale * 1.3, y + scale * 1.3, Black, B);
+    epd_draw_line(3 + x - scale * 1.3, y - scale * 1.3, 3 + x + scale * 1.3, y + scale * 1.3, Black, B);
+    epd_draw_line(1 + x - scale * 1.3, y + scale * 1.3, 1 + x + scale * 1.3, y - scale * 1.3, Black, B);
+    epd_draw_line(2 + x - scale * 1.3, y + scale * 1.3, 2 + x + scale * 1.3, y - scale * 1.3, Black, B);
+    epd_draw_line(3 + x - scale * 1.3, y + scale * 1.3, 3 + x + scale * 1.3, y - scale * 1.3, Black, B);
+  }
   epd_fill_circle(x, y, scale * 1.3, White, B);
+  epd_fill_circle(x, y, scale, Black, B);
+  epd_fill_circle(x, y, scale - linesize, White, B);
+  /*Serial.println("Addsun Raus");
+  Serial.println(ESP.getFreeHeap());*/
 }
 
 void addsnow(int x, int y, int scale, bool IconSize) {
@@ -726,12 +820,16 @@ void ClearSky(int x, int y, bool IconSize, String IconName) {
 }
 
 void BrokenClouds(int x, int y, bool IconSize, String IconName) {
+  /*Serial.println("IN Broken Clouds rein");
+  Serial.println(ESP.getFreeHeap());*/
   int scale = Small, linesize = 5;
   if (IconName.endsWith("n")) addmoon(x, y, IconSize);
   y += 15;
   if (IconSize == LargeIcon) scale = Large;
   addcloud(x, y, scale * (IconSize ? 1 : 0.75), linesize);
   addsun(x - scale * 1.8, y - scale * 1.8, scale, IconSize);
+  /*Serial.println("BrokenClouds Raus");
+  Serial.println(ESP.getFreeHeap());*/
 }
 
 void FewClouds(int x, int y, bool IconSize, String IconName) {
@@ -832,6 +930,8 @@ void addmoon(int x, int y, bool IconSize) {
 }
 
 void Nodata(int x, int y, bool IconSize, String IconName) {
+  Serial.println("\nIconName:" + IconName);
+  
   if (IconSize == LargeIcon) newfont = OpenSans24B; else newfont = OpenSans12B;
   drawString(x - 3, y - 10, "?", CENTER);
 }
@@ -862,7 +962,7 @@ void DrawGraph(int x_pos, int y_pos, int gwidth, int gheight, float Y1Min, float
 #define auto_scale_margin 0 
 #define y_minor_axis 5  
   newfont = OpenSans10B;
-  int maxYscale = 10000;
+  int maxYscale = -10000;
   int minYscale = 10000;
   int last_x, last_y;
   float x2, y2;
@@ -872,6 +972,7 @@ void DrawGraph(int x_pos, int y_pos, int gwidth, int gheight, float Y1Min, float
       if (DataArray[i] <= minYscale) minYscale = DataArray[i];
     }
     maxYscale = round(maxYscale + auto_scale_margin); // Auto scale the graph and round to the nearest value defined, default was Y1Max
+    //Serial.print("maxYScale: ");Serial.println(maxYscale);
     Y1Max = round(maxYscale + 0.5);
     if (minYscale != 0) minYscale = round(minYscale - auto_scale_margin); // Auto scale the graph and round to the nearest value defined, default was Y1Min
     Y1Min = round(minYscale);
@@ -894,6 +995,7 @@ void DrawGraph(int x_pos, int y_pos, int gwidth, int gheight, float Y1Min, float
     last_y = y2;
   }
   //Draw the Y-axis scale
+  newfont = OpenSans8B; 
 #define number_of_dashes 20
   for (int spacing = 0; spacing <= y_minor_axis; spacing++) {
     for (int j = 0; j <= number_of_dashes; j++) { 
@@ -929,6 +1031,3 @@ void drawString(int x, int y, String text, alignment align) {
   int cursor_y = y + h;
   write_string(&newfont, data, &x, &cursor_y, B);
 }
-/*
-   931 lines of code 09-04-2021
-*/
