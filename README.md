@@ -7,3 +7,4 @@ NOTE: DONT USE THIS SOFTWARE IF YOU DONT LIKE THE LICENCE TERMS
 You may get some compilation warnings, they are not errors
 
 Version 4.1 is faster and more compact and has many changes.
+Fixed some major typos, syntax errors and miss alignments
